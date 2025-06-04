@@ -1,53 +1,17 @@
-// Import required packages
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const fetch = require('node-fetch');
-const fs = require('fs'); // For logging to file
 const axios = require('axios');
+require('dotenv').config();
 
-// Create Express app
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Debug startup
-console.log('Starting server...');
-console.log('Node environment:', process.env.NODE_ENV);
-console.log('Current directory:', process.cwd());
-console.log('OpenAI API Key present:', process.env.OPENAI_API_KEY ? 'Yes' : 'No');
-
-// Configure logging
-const logToFile = (message) => {
-  const timestamp = new Date().toISOString();
-  const logMessage = `${timestamp}: ${message}\n`;
-  fs.appendFileSync('api-server.log', logMessage);
-  console.log(message);
-};
-
-// Configure rate limiting
-const limiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: process.env.RATE_LIMIT || 30, // Limit each IP to 30 requests per minute
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: {
-    status: 429,
-    message: 'Too many requests, please try again later.'
-  }
-});
-
-// Configure CORS
+// Middleware
 app.use(cors());
-
-// Set trust proxy for proper IP detection behind reverse proxies (fixes express-rate-limit warning)
-app.set('trust proxy', 1);
-
-// Body parser middleware
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Define routes
+// Health check endpoint
 app.get('/', (req, res) => {
   res.json({
     message: "DeepSeek Food Analyzer API Server",
