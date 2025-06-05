@@ -651,4 +651,5 @@ app.post('/api/nutrition', limiter, async (req, res) => {
 app.listen(PORT, () => {
   logToFile(`Server running on port ${PORT}`);
   logToFile(`API Key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
-}); 
+}); / /   F o r c e   u p d a t e  
+ 
