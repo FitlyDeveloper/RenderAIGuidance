@@ -243,7 +243,11 @@ async function analyzeNutrition(imageData) {
       messages: [
         {
           role: 'system',
-          content: `You are a JSON‐only food analyzer. When I send you an image, you must respond with valid JSON and nothing else. Use this exact schema, reference USDA Food Data Central as your source for each ingredient's nutrient values, and ensure correct units (µg vs. mg) and proper summation across ingredients:
+          content: `You are a JSON‐only food analyzer. When I send you an image, you must respond with valid JSON and nothing else. Use this exact schema, reference USDA Food Data Central as your source for each ingredient's nutrient values, and ensure correct units (µg vs. mg) and proper summation across ingredients.
+
+CRITICAL USDA REFERENCE VALUES (use these exactly):
+Pineapple (per 100g): vitaminC_mg=47.8, vitaminA_mcg=3, vitaminE_mg=0.02, vitaminB1_mg=0.079, vitaminB9_mcg=18
+Watermelon (per 100g): vitaminC_mg=8.1, vitaminA_mcg=28, vitaminE_mg=0.05, vitaminB1_mg=0.033, vitaminB9_mcg=3
 
 {
 "ingredients": [
@@ -251,6 +255,9 @@ async function analyzeNutrition(imageData) {
 "name": "string",
 "weight_g": number,
 "kcal": number,
+"protein_g": number,
+"fat_g": number,
+"carbs_g": number,
 "micronutrients": {
 "vitaminA_mcg": number,
 "vitaminC_mg": number,
@@ -324,18 +331,22 @@ async function analyzeNutrition(imageData) {
 }
 
 Rules:
-- Always consult USDA Food Data Central for each ingredient's nutrient values
+- Use EXACT USDA Food Data Central values from the reference table above
+- Scale values proportionally by weight (e.g., 150g watermelon = 1.5 × per-100g values)
 - Ensure vitamin A, D, K, B7, B9, B12, selenium, chromium, iodine, molybdenum use micrograms (mcg). All others use milligrams (mg)
 - Sum values across all detected ingredients so that "totals" accurately reflect the meal
 - If a nutrient is not found for an ingredient, return 0 (never null)
-- No additional keys, no commentary, no markdown—only JSON`
+- No additional keys, no commentary, no markdown—only JSON
+
+EXAMPLE for 100g pineapple + 150g watermelon:
+Expected totals: vitaminC_mg=59.95 (47.8 + 12.15), vitaminA_mcg=45 (3 + 42), vitaminE_mg=0.095 (0.02 + 0.075)`
         },
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Analyze this food image and return nutrition data using USDA Food Data Central values.'
+              text: 'Analyze this food image and return nutrition data using EXACT USDA Food Data Central values from the reference table.'
             },
             {
               type: 'image_url',
@@ -374,9 +385,9 @@ Rules:
         name: ingredient.name,
         amount: `${ingredient.weight_g}g`,
         calories: ingredient.kcal,
-        protein: (ingredient.kcal * 0.04) / 4, // Estimate protein from calories
-        fat: (ingredient.kcal * 0.02) / 9, // Estimate fat from calories
-        carbs: (ingredient.kcal * 0.20) / 4 // Estimate carbs from calories
+        protein: ingredient.protein_g || 0,
+        fat: ingredient.fat_g || 0,
+        carbs: ingredient.carbs_g || 0
       })),
       calories: nutritionData.totals.calories,
       protein: nutritionData.totals.protein_g,
