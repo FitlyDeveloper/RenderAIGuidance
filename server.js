@@ -652,4 +652,5 @@ app.listen(PORT, () => {
   logToFile(`Server running on port ${PORT}`);
   logToFile(`API Key configured: ${process.env.OPENAI_API_KEY ? 'Yes' : 'No'}`);
 }); / /   F o r c e   u p d a t e  
+ / /   F i x   i n g r e d i e n t   s u m m a t i o n  
  
