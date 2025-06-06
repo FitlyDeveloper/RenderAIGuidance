@@ -232,9 +232,12 @@ async function analyzeNutrition(imageData) {
     const fetch = require('node-fetch');
     
     if (!process.env.OPENAI_API_KEY) {
+      console.error('OpenAI API key not configured');
       throw new Error('OpenAI API key not configured');
     }
 
+    console.log('Calling OpenAI API for image analysis...');
+    
     const requestBody = {
       model: 'gpt-4o',
       temperature: 0,
@@ -243,18 +246,14 @@ async function analyzeNutrition(imageData) {
       messages: [
         {
           role: 'system',
-          content: `You are a nutrition analyzer. Return only valid JSON with realistic USDA-based nutrition values.
+          content: `You are a nutrition analyzer. Analyze the food image and return ONLY valid JSON with realistic nutrition values.
 
-For common foods, use these USDA values per 100g:
-- Pineapple: 50 kcal, vitamin C=47.8mg, vitamin A=3mcg, vitamin E=0.02mg
-- Watermelon: 30 kcal, vitamin C=8.1mg, vitamin A=28mcg, vitamin E=0.05mg
-
-Return JSON in this format:
+Return JSON in this exact format:
 {
   "meal_name": "Food Name",
   "ingredients": [
     {
-      "name": "Pineapple",
+      "name": "Food Item",
       "amount": "100g",
       "calories": 50,
       "protein": 0.5,
@@ -304,17 +303,18 @@ Return JSON in this format:
 }
 
 Rules:
-- Use realistic portion sizes (50-200g)
-- Scale nutrition values proportionally by weight
-- Sum values across all ingredients
-- Use proper units: vitamin A/D/K/B7/B9/B12 in mcg, others in mg`
+- Identify the ACTUAL foods in the image (yogurt, berries, chocolate, etc.)
+- Use realistic portion sizes (50-200g per ingredient)
+- Use realistic nutrition values for each ingredient
+- Sum all ingredients for total values
+- Vitamin A/D/K/B7/B9/B12 in mcg, others in mg`
         },
         {
           role: 'user',
           content: [
             {
               type: 'text',
-              text: 'Analyze this food image and return realistic USDA nutrition values as JSON.'
+              text: 'Analyze this food image and identify the actual ingredients. Return realistic nutrition data as JSON.'
             },
             {
               type: 'image_url',
@@ -334,85 +334,99 @@ Rules:
       body: JSON.stringify(requestBody)
     });
 
+    console.log(`OpenAI API response status: ${response.status}`);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`OpenAI API error: ${response.status} - ${errorText}`);
       throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
+    console.log('OpenAI API response received successfully');
     
     if (!data.choices || !data.choices[0] || !data.choices[0].message || !data.choices[0].message.content) {
+      console.error('Invalid response structure from OpenAI API:', data);
       throw new Error('Invalid response from OpenAI API');
     }
 
-    const nutritionData = JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content;
+    console.log('OpenAI response content (first 200 chars):', content.substring(0, 200));
     
-    // Return the data as-is since it's already in the expected format
-    return nutritionData;
+    try {
+      const nutritionData = JSON.parse(content);
+      console.log('Successfully parsed nutrition data:', nutritionData.meal_name);
+      
+      // Validate the response has required fields
+      if (!nutritionData.meal_name || !nutritionData.ingredients || !Array.isArray(nutritionData.ingredients)) {
+        console.error('Invalid nutrition data structure:', nutritionData);
+        throw new Error('Invalid nutrition data structure');
+      }
+      
+      return nutritionData;
+      
+    } catch (parseError) {
+      console.error('JSON parsing error:', parseError);
+      console.error('Raw content:', content);
+      throw new Error('Failed to parse OpenAI response as JSON');
+    }
 
   } catch (error) {
     console.error('Error in analyzeNutrition:', error);
     
-    // Return fallback realistic values for watermelon + pineapple if API fails
+    // Only return fallback if there's a real error
+    console.log('Using fallback nutrition data due to error');
     return {
-      meal_name: "Mixed Fruit Bowl",
+      meal_name: "Unknown Food",
       ingredients: [
         {
-          name: "Watermelon",
-          amount: "150g",
-          calories: 45,
-          protein: 0.9,
-          fat: 0.3,
-          carbs: 12
-        },
-        {
-          name: "Pineapple",
-          amount: "100g", 
-          calories: 50,
-          protein: 0.5,
-          fat: 0.1,
-          carbs: 13
+          name: "Unknown Item",
+          amount: "100g",
+          calories: 100,
+          protein: 2,
+          fat: 1,
+          carbs: 20
         }
       ],
-      calories: 95,
-      protein: 1.4,
-      fat: 0.4,
-      carbs: 25,
-      // Realistic USDA values for 150g watermelon + 100g pineapple
-      vitamin_a: 45, // 28*1.5 + 3 = 45 mcg
-      vitamin_c: 60, // 8.1*1.5 + 47.8 = 60 mg
+      calories: 100,
+      protein: 2,
+      fat: 1,
+      carbs: 20,
+      vitamin_a: 10,
+      vitamin_c: 5,
       vitamin_d: 0,
-      vitamin_e: 0.095, // 0.05*1.5 + 0.02 = 0.095 mg
-      vitamin_k: 0.85, // 0.1*1.5 + 0.7 = 0.85 mcg
-      vitamin_b1: 0.13, // 0.033*1.5 + 0.079 = 0.13 mg
-      vitamin_b2: 0.08, // 0.021*1.5 + 0.032 = 0.08 mg
-      vitamin_b3: 0.77, // 0.178*1.5 + 0.5 = 0.77 mg
-      vitamin_b5: 0.54, // 0.221*1.5 + 0.213 = 0.54 mg
-      vitamin_b6: 0.18, // 0.045*1.5 + 0.112 = 0.18 mg
-      vitamin_b7: 2.5, // 0.6*1.5 + 1.6 = 2.5 mcg
-      vitamin_b9: 22.5, // 3*1.5 + 18 = 22.5 mcg
+      vitamin_e: 0.1,
+      vitamin_k: 1,
+      vitamin_b1: 0.1,
+      vitamin_b2: 0.1,
+      vitamin_b3: 1,
+      vitamin_b5: 0.5,
+      vitamin_b6: 0.1,
+      vitamin_b7: 5,
+      vitamin_b9: 10,
       vitamin_b12: 0,
-      calcium: 23.5, // 7*1.5 + 13 = 23.5 mg
-      chloride: 93.5, // 3*1.5 + 89 = 93.5 mg
-      chromium: 0.55, // 0.2*1.5 + 0.25 = 0.55 mcg
-      copper: 173, // 42*1.5 + 110 = 173 mcg
-      fluoride: 4.45, // 1.5*1.5 + 2.2 = 4.45 mg
-      iodine: 2.5, // 0.8*1.5 + 1.3 = 2.5 mcg
-      iron: 0.65, // 0.24*1.5 + 0.29 = 0.65 mg
-      magnesium: 27, // 10*1.5 + 12 = 27 mg
-      manganese: 0.984, // 0.038*1.5 + 0.927 = 0.984 mg
-      molybdenum: 2.7, // 1*1.5 + 1.2 = 2.7 mcg
-      phosphorus: 24.5, // 11*1.5 + 8 = 24.5 mg
-      potassium: 277, // 112*1.5 + 109 = 277 mg
-      selenium: 0.7, // 0.4*1.5 + 0.1 = 0.7 mcg
-      sodium: 2.5, // 1*1.5 + 1 = 2.5 mg
-      zinc: 0.27, // 0.1*1.5 + 0.12 = 0.27 mg
-      fiber: 2.0, // 0.4*1.5 + 1.4 = 2.0 g
+      calcium: 50,
+      chloride: 100,
+      chromium: 1,
+      copper: 50,
+      fluoride: 1,
+      iodine: 1,
+      iron: 1,
+      magnesium: 20,
+      manganese: 0.5,
+      molybdenum: 2,
+      phosphorus: 50,
+      potassium: 200,
+      selenium: 1,
+      sodium: 10,
+      zinc: 1,
+      fiber: 2,
       cholesterol: 0,
-      sugar: 19.15, // 6.2*1.5 + 9.85 = 19.15 g
-      saturated_fats: 0.033, // 0.016*1.5 + 0.009 = 0.033 g
-      omega_3: 0.04, // 0*1.5 + 0.009 = 0.04 mg
-      omega_6: 0.115, // 0.05*1.5 + 0.04 = 0.115 g
-      health_score: "8/10"
+      sugar: 10,
+      saturated_fats: 0.5,
+      omega_3: 0.1,
+      omega_6: 0.2,
+      health_score: "6/10"
     };
   }
 }
